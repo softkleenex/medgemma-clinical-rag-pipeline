@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.ipynb_checkpoints/
+
+# Secrets & Env
+.env
+.env.example
+venv/
+.venv/
+
+# Kaggle / Model Weights (Large Files)
+data/
+models/
+submissions/
+*.bin
+*.safetensors
+*.zip
+
+# OS Files
+.DS_Store
+
+# Trial/Temporary Results (Keep only the 'final' folder)
+results/kaggle_run_*/
+results/v17_success/
+results/v19_debug/
+results/screenshots/
+results/images/
+results/banner.html
+results/narration/*.txt
+!results/final/
+*.mp4
