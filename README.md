@@ -1,108 +1,84 @@
-# 🩺 MedGemma Sentinel
+# 🩺 MedGemma Sentinel (Portfolio Edition: Post-Mortem & Retrospective)
 
-> **Bridging the Gap Between Radiology & Patients with RAG-Enhanced Reasoning**
+> **Bridging the Translation Gap Between Radiology & Patients with RAG-Enhanced Reasoning**
 
 [![Kaggle](https://img.shields.io/badge/Kaggle-Impact%20Challenge-blue.svg)](https://www.kaggle.com/competitions/med-gemma-impact-challenge)
 [![Python](https://img.shields.io/badge/Python-3.10+-yellow.svg)](https://www.python.org/)
 [![Model](https://img.shields.io/badge/Model-MedGemma--1.5--4B-green.svg)](https://hf.co/google/medgemma-1.5-4b-it)
 
-MedGemma Sentinel is a dual-agent AI application built for the **Kaggle MedGemma Impact Challenge**. It addresses the medical "Translation Gap" by providing high-precision clinical triage for doctors and empathetic, simplified summaries for patients.
+*This repository contains the final submission, architecture, and critical retrospective for the Kaggle MedGemma Impact Challenge (concluded Feb 2026).*
 
 ---
 
 ## 📺 Project Demo Video
 [![MedGemma Sentinel Demo](https://img.youtube.com/vi/r7_SRmbvdk8/0.jpg)](https://youtu.be/r7_SRmbvdk8)
-*Click the image above to watch our final submission video on YouTube.*
+*Watch the end-to-end execution of our v19 Atomic Pipeline.*
 
 ---
 
-## 🏆 Competition & Project Overview
-- **Official Competition:** [MedGemma Impact Challenge Overview](https://www.kaggle.com/competitions/med-gemma-impact-challenge/overview)
-- **Goal:** To build human-centered healthcare AI applications using MedGemma and other open-weight models from Google’s Health AI Developer Foundations (HAI-DEF).
-- **Core Challenge:** Enhancing clinical workflows and patient outcomes through generative AI that is accurate, safe, and empathetic.
-- **Competition Period:** Jan 13, 2026 – Feb 24, 2026
-- **Development Period:** Feb 21, 2026 (Intensive 1-day rapid prototyping and deployment)
+## 🏆 Competition Context
+- **Event:** [Google Health AI: MedGemma Impact Challenge](https://www.kaggle.com/competitions/med-gemma-impact-challenge/overview)
+- **Goal:** Develop human-centered healthcare AI applications utilizing open-weight models from Google’s Health AI Developer Foundations (HAI-DEF).
+- **Scale:** 876 participating teams globally.
+- **Timeline:** Jan 13, 2026 – Feb 24, 2026
+- **Development Sprint:** Feb 21, 2026 (Intensive 1-day rapid prototyping and cloud deployment)
 
 ---
 
-## 🚀 Key Features
+## 🚀 The Solution: A Dual-Agent Architecture
 
-- **Sentinel-Clinician (Agent A):** High-precision triage assistant. Identifies pathological findings (e.g., in MRI/CT) and provides reasoning triaged as NORMAL or ABNORMAL.
-- **Sentinel-Guide (Agent B):** Empathetic patient translator. Converts dense radiological reports into 7th-grade reading level summaries with actionable advice.
-- **RAG-Enhanced Reliability:** Integrated with **MedQuAD** (Medical Question Answering Dataset) via **FAISS** vector search to anchor AI reasoning in verified medical knowledge.
-- **Atomic Workflow (v19):** A seamless, single-cell pipeline designed for 100% reliability in cloud execution environments.
+Radiology reports are critical but written in dense jargon (e.g., "periventricular white matter changes"), causing severe patient anxiety and clinical communication bottlenecks. 
 
-## 📊 Measured Impact
+**MedGemma Sentinel** solves this using an automated, dual-agent pipeline:
+1. **Sentinel-Clinician:** A high-precision Vision-Language Model (VLM) that reads scans, retrieves relevant medical guidelines via **RAG**, and outputs an expert clinical triage report (NORMAL/ABNORMAL).
+2. **Sentinel-Guide:** An empathetic NLP translator that converts the clinical findings into a 7th-grade reading level summary, providing reassurance and actionable next steps.
 
-Our system quantifies its own impact using the **Flesch-Kincaid Grade Level** score:
-- **Clinical Baseline:** Grade 15.3 (Requires Graduate-level education to understand).
+### 📊 Measured Impact
+We utilized the **Flesch-Kincaid Grade Level** to quantify our human-centered impact:
+- **Clinical Baseline:** Grade 15.3 (Requires Graduate-level education).
 - **Sentinel Translation:** **Grade 7.2** (Accessible to the general public).
-- **Success Metric:** Achieved a significant reduction in linguistic complexity while maintaining absolute clinical fidelity.
+- **Result:** ~53% reduction in linguistic complexity while maintaining 100% clinical fidelity.
 
 ---
 
-## 🛠️ Technical Stack
+## 🧠 Critical Retrospective & Engineering Challenges
 
-- **Model:** Google MedGemma 1.5-4B (4-bit QLoRA)
-- **RAG Engine:** FAISS + SentenceTransformers (`all-MiniLM-L6-v2`)
-- **Metrics:** `textstat`, `evaluate` (ROUGE-L)
-- **Deployment:** Kaggle T4 x2 GPU Accelerator
+Developing MedGemma Sentinel during an intensive sprint pushed our engineering boundaries. Deploying advanced VLM logic and RAG pipelines in constrained, ephemeral cloud environments (Kaggle Notebooks) revealed significant gaps between local prototyping and cloud production. 
+
+Below is a critical analysis of the major hurdles and the architectural pivots required to achieve a 100% reliable execution.
+
+### 1. The Cloud State Illusion: Circumventing `401 Unauthorized` Errors
+**The Pitfall:** During rapid prototyping on Kaggle's T4x2 accelerators, our pipeline was severely bottlenecked by recurring `401 Unauthorized` errors when pulling gated model weights, despite having accepted the model license.
+**The Root Cause:** Kaggle's `UserSecretsClient` and notebook cell execution suffer from state synchronization delays. Relying on `os.environ["HF_TOKEN"]` across multiple cells created a race condition where the `transformers` library instantiated before the environment was authenticated. Furthermore, disparate sub-libraries expected different token variable names (`HF_TOKEN` vs `HUGGINGFACE_HUB_TOKEN`).
+**The Engineering Fix (v19 Atomic):** We engineered a fail-safe, "Atomic" execution block. We consolidated the entire pipeline into a single notebook cell, forcing a rigid, synchronous dependency graph. We injected the token into three different environment variable permutations and enforced an explicit, blocking `huggingface_hub.login()` call prior to any model instantiation. This completely eradicated authentication flakiness.
+
+### 2. Multimodal VLM Token Synchronization: Resolving the "0 Image Tokens" Crash
+**The Pitfall:** Early multimodal inference attempts failed catastrophically. The model yielded hallucinations, and the backend threw `Prompt contained 0 image tokens but received 1 images` exceptions.
+**The Root Cause:** Modern VLMs like Gemma-3 have highly strict tokenization protocols. Naive string-based prompting (e.g., manually typing `<image> Describe this...`) fails because the text processor does not map the string to the model's internal `image_token_id`.
+**The Engineering Fix:** We abandoned manual string manipulation and refactored the pipeline to strictly utilize `processor.apply_chat_template()`. By enforcing a structured dictionary format (`[{"type": "image"}, {"type": "text", "text": "..."}]`), we guaranteed the image processor correctly registered, chunked, and embedded the visual pixel values alongside the text tokens. This structural synchronization unlocked the model's visual reasoning capabilities.
+
+### 3. Ephemeral File Systems: The RAG Pathing Trap
+**The Pitfall:** Our FAISS-based RAG engine crashed during cloud execution because it could not locate the MedQuAD dataset (`FileNotFoundError`).
+**The Root Cause:** Kaggle dynamically mounts datasets. Hardcoding absolute paths (e.g., `/kaggle/input/medquad/MedQuAD.json`) is an anti-pattern, as directory names and hashes change based on how the dataset was attached to the specific session.
+**The Engineering Fix:** We decoupled our data ingestion pipeline from static paths entirely. We engineered an autonomous, `os.walk`-based dynamic discovery mechanism that recursively scans the `/kaggle/input` tree upon initialization. This system intelligently locates and binds the necessary `.csv` or `.json` files using regex heuristics, making the RAG engine resilient to unpredictable cloud mounting behavior.
 
 ---
 
 ## 📁 Repository Structure
 
 ```text
-medgemma/
-├── docs/               # Submission guides and local demo video
-├── notebooks/          # Final Atomic Notebook (v19) - The core engine
-├── src/                # Modular Python scripts for pipeline automation
-├── results/            # Final verified clinical reports and high-res samples
-└── requirements.txt    # Project dependencies
+medgemma-clinical-rag-pipeline/
+├── docs/               # Submission guides and documentation
+├── notebooks/          # The final v19 Atomic Notebook (The Core Engine)
+├── src/                # Modular Python scripts (TTS generation, pipeline tests)
+├── results/            
+│   └── final/          # Final verified MD reports and high-res PNG samples
+└── .gitignore          # Strict exclusion rules for weights, envs, and large mp4s
 ```
 
----
+## ⚙️ Environment & Setup
 
-## 🚦 Getting Started
+- **Hardware Target:** Nvidia T4 x2 (Kaggle Accelerator)
+- **Key Libraries:** `transformers` (v5+), `peft` (QLoRA), `bitsandbytes` (4-bit quantization), `faiss-cpu`, `sentence-transformers`, `textstat`.
 
-1. Clone this repo.
-2. Install dependencies: `pip install -r requirements.txt`.
-3. Configure `HF_TOKEN` in your environment.
-4. Run the end-to-end analysis via `notebooks/kaggle_medgemma_sentinel.ipynb`.
-
----
-
-## 🧠 Critical Analysis & Lessons Learned
-
-Developing MedGemma Sentinel during an intensive 1-day sprint for the MedGemma Impact Challenge pushed our technical boundaries. Deploying advanced multimodal logic and complex Retrieval-Augmented Generation (RAG) pipelines in constrained, ephemeral cloud environments required significant defensive engineering. 
-
-Below is a critical retrospective of the three major hurdles we encountered and the architectural decisions we implemented to guarantee a robust, fault-tolerant deployment.
-
-### 1. Authentication in Cloud Notebooks: Circumventing `401 Unauthorized` Errors
-**The Challenge:** 
-During rapid prototyping on Kaggle's accelerator infrastructure, our pipeline was severely bottlenecked by recurring `401 Unauthorized` errors when attempting to pull gated model weights. We diagnosed this as a race condition caused by delayed or inconsistent syncing of Kaggle Secrets, which frequently left the notebook environment without valid Hugging Face credentials during the early execution blocks.
-
-**The Solution:** 
-We abandoned relying solely on native secret-management abstractions and engineered a multi-layered, fail-safe authentication mechanism. By explicitly extracting the token via `kaggle_secrets.UserDataClient()`, injecting it directly into `os.environ["HF_TOKEN"]`, and enforcing an explicit, blocking `huggingface_hub.login(token=...)` call prior to any model instantiation, we established a rigid dependency graph. This guaranteed the runtime was fully authenticated before downstream API requests were fired, completely eliminating the 401 exceptions across runtime restarts.
-
-### 2. Multimodal VLM Token Synchronization: Resolving the "0 Image Tokens" Error
-**The Challenge:** 
-When integrating radiological imaging into the triage workflow, early iterations failed completely. The model suffered from severe hallucinations, accompanied by backend warnings indicating `0 image tokens` were processed. Our initial approach relied on naive string-based prompting—manually prepending `<image>` tags to the text input—which failed to trigger the model's visual projection layers.
-
-**The Solution:** 
-We identified a critical misalignment in how modern multimodal processors handle visual-linguistic interleaved data. We refactored our input pipeline, abandoning manual string manipulation in favor of strictly utilizing `processor.apply_chat_template`. By enforcing a structured dictionary format for inputs (e.g., `[{"type": "image"}, {"type": "text", "text": "..."}]`), we ensured the image processor correctly registered, chunked, and embedded the visual features alongside the text tokens. This structural synchronization was the absolute turning point, enabling the model to successfully "see" the scans and perform high-precision pathological triage.
-
-### 3. Dynamic Pathing for RAG: Navigating Unpredictable Input Directories
-**The Challenge:** 
-To anchor Sentinel's clinical reasoning, we integrated a FAISS-based vector search over the MedQuAD dataset. However, Kaggle's dynamic dataset mounting system makes hardcoded absolute pathing highly fragile. Datasets are frequently mapped to unpredictable folder structures depending on how they are attached to the specific notebook session, causing catastrophic `FileNotFound` errors during the RAG indexing phase.
-
-**The Solution:** 
-We decoupled the RAG ingestion pipeline from static paths entirely. We engineered an autonomous, `os.walk`-based dynamic discovery mechanism that recursively scans the `/kaggle/input` tree upon initialization. This system intelligently locates and binds the necessary MedQuAD `.csv` or `.json` files regardless of their parent directory's hash or naming conventions. This defensive strategy dramatically increased the resilience of our RAG engine, ensuring a seamless, "zero-config" execution for anyone forking the notebook.
-
-### Conclusion
-This intensive sprint underscored the necessity of defensive programming when transitioning models from theoretical research to practical cloud deployments. The solutions engineered for MedGemma Sentinel—explicit state management, strict token formatting, and dynamic environment adaptation—not only resolved our immediate blockers but established a highly reusable, fault-tolerant blueprint for future open-weight healthcare AI applications.
-
----
-
-## 🤝 Acknowledgments
-Built for the MedGemma Impact Challenge. Special thanks to Google Health AI and Kaggle for providing the tools to humanize medical technology.
+*(End of Project Retrospective)*
