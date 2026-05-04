@@ -10,6 +10,13 @@
 
 ---
 
+## 🏅 Competition Results
+- **Status:** [Pending Evaluation - Results expected March 2026]
+- **Final Rank:** TBD
+- **Awards:** TBD
+
+---
+
 ## 📺 Project Demo Video
 [![MedGemma Sentinel Demo](https://img.youtube.com/vi/r7_SRmbvdk8/0.jpg)](https://youtu.be/r7_SRmbvdk8)
 *Watch the end-to-end execution of our v19 Atomic Pipeline.*
